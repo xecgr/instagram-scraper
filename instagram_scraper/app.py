@@ -984,7 +984,9 @@ class InstagramScraper(object):
                     'h': time.strftime('%Hh', time.localtime(self.__get_timestamp(item))),
                     'm': time.strftime('%Mm', time.localtime(self.__get_timestamp(item))),
                     's': time.strftime('%Ss', time.localtime(self.__get_timestamp(item))),
-                    'idx' : idx
+                    'idx' : idx,
+                    'lll': item.get('edge_media_preview_like',{}).get('count','--'),
+                    'ccc': item.get('edge_media_to_comment',{}).get('count','--'),
                 }
                 customfilename = str(template.format(**template_values) + extension)
                 yield url, customfilename
