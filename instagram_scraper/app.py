@@ -87,7 +87,7 @@ class InstagramScraper(object):
                             media_types=['image', 'video', 'story-image', 'story-video'],
                             tag=False, location=False, search_location=False, comments=False,
                             verbose=0, include_location=False, filter=None,
-                                                        template='{urlname}')
+                                                        template='{urlname}', carrousel_only_cover=False)
 
         allowed_attr = list(default_attr.keys())
         default_attr.update(kwargs)
@@ -425,7 +425,6 @@ class InstagramScraper(object):
                                             total=len(future_to_item),
                                             desc='Downloading', disable=self.quiet):
                         item = future_to_item[future]
-
                         if future.exception() is not None:
                             self.logger.warning(
                                 'Media for {0} at {1} generated an exception: {2}'.format(value, item['urls'],
@@ -584,7 +583,6 @@ class InstagramScraper(object):
                         for future in tqdm.tqdm(concurrent.futures.as_completed(future_to_item), total=len(future_to_item),
                                                 desc='Downloading', disable=self.quiet):
                             item = future_to_item[future]
-
                             if future.exception() is not None:
                                 self.logger.error(
                                     'Media at {0} generated an exception: {1}'.format(item['urls'], future.exception()))
@@ -732,7 +730,6 @@ class InstagramScraper(object):
     def query_media_gen(self, user, end_cursor=''):
         """Generator for media."""
         media, end_cursor = self.__query_media(user['id'], end_cursor)
-
         if media:
             try:
                 while True:
@@ -955,28 +952,43 @@ class InstagramScraper(object):
                     os.utime(file_path, (file_time, file_time))
 
     def templatefilename(self, item):
-
-        for url in item['urls']:
+        #only the first
+        urls = item['urls']
+        if self.carrousel_only_cover and len(urls)>1:
+            self.logger.info("Only cover for carrousels : {}".format(item['shortcode']))
+            urls = urls[:1]
+        
+        for idx,url in enumerate(urls):
             filename, extension = os.path.splitext(os.path.split(url.split('?')[0])[1])
             try:
-                template = self.template
+                #allow carrousel adding the current picture offset
+                template = self.template+"{idx}"
+                if idx==0:
+                    idx =''
+                else:
+                    idx = "_{}".format(idx)
+                
                 template_values = {
-                                    'username' : item['username'],
-                                   'urlname': filename,
-                                    'shortcode': str(item['shortcode']),
-                                    'mediatype' : item['__typename'][5:],
-                                   'datetime': time.strftime('%Y%m%d %Hh%Mm%Ss',
-                                                             time.localtime(self.__get_timestamp(item))),
-                                   'date': time.strftime('%Y%m%d', time.localtime(self.__get_timestamp(item))),
-                                   'year': time.strftime('%Y', time.localtime(self.__get_timestamp(item))),
-                                   'month': time.strftime('%m', time.localtime(self.__get_timestamp(item))),
-                                   'day': time.strftime('%d', time.localtime(self.__get_timestamp(item))),
-                                   'h': time.strftime('%Hh', time.localtime(self.__get_timestamp(item))),
-                                   'm': time.strftime('%Mm', time.localtime(self.__get_timestamp(item))),
-                                   's': time.strftime('%Ss', time.localtime(self.__get_timestamp(item)))}
-
+                    'username' : item['username'],
+                    'urlname': filename,
+                    'shortcode': str(item['shortcode']),
+                    'mediatype' : item['__typename'][5:],
+                    'datetime': time.strftime(
+                        '%Y%m%d %Hh%Mm%Ss',
+                        time.localtime(self.__get_timestamp(item))
+                    ),
+                    'date': time.strftime('%Y%m%d', time.localtime(self.__get_timestamp(item))),
+                    'year': time.strftime('%Y', time.localtime(self.__get_timestamp(item))),
+                    'month': time.strftime('%m', time.localtime(self.__get_timestamp(item))),
+                    'day': time.strftime('%d', time.localtime(self.__get_timestamp(item))),
+                    'h': time.strftime('%Hh', time.localtime(self.__get_timestamp(item))),
+                    'm': time.strftime('%Mm', time.localtime(self.__get_timestamp(item))),
+                    's': time.strftime('%Ss', time.localtime(self.__get_timestamp(item))),
+                    'idx' : idx
+                }
                 customfilename = str(template.format(**template_values) + extension)
                 yield url, customfilename
+                
             except KeyError:
                 customfilename = str(filename + extension)
                 yield url, customfilename
@@ -1177,6 +1189,7 @@ def main():
                         help='Retry download attempts endlessly when errors are received')
     parser.add_argument('--verbose', '-v', type=int, default=0, help='Logging verbosity level')
     parser.add_argument('--template', '-T', type=str, default='{urlname}', help='Customize filename template')
+    parser.add_argument('--carrousel-only-cover', '-c', action='store_true', default=False, help='Save only cover for carrousels')
 
     args = parser.parse_args()
 
@@ -1210,7 +1223,7 @@ def main():
     if args.retry_forever:
         global MAX_RETRIES
         MAX_RETRIES = sys.maxsize
-
+    
     scraper = InstagramScraper(**vars(args))
 
     scraper.login()
